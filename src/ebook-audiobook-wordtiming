@@ -121,9 +121,9 @@ my $USAGE = "Usage:
 
 sub getEbookWordFile($);
 sub getAudiobookWordFile(@);
-sub ensureEbookCoolreaderSentenceInfoCacheFile($$);
-sub ensureEbookPandocPlaintextCacheFile($$);
-sub ensureVoskWordsCacheFile($$);
+sub ensureCacheFileEbookCoolreaderSentenceInfo($$);
+sub ensureCacheFileEbookPandocPlaintext($$);
+sub ensureCacheFileAudiobookVoskWordsJson($$);
 sub getEbookWordFileTimestamps($$@);
 sub getCleanFileName($);
 sub globFirst($);
@@ -203,7 +203,7 @@ sub main(@){
     my @audiobookWordInfo;
 
     for my $audioFile(@audiobookFiles){
-      my $cacheFile = ensureVoskWordsCacheFile($audioFile, $fileInfoCache);
+      my $cacheFile = ensureCacheFileAudiobookVoskWordsJson($audioFile, $fileInfoCache);
       my $json = readFileXZ($cacheFile);
       my $fileName = basename $audioFile;
 
@@ -227,11 +227,11 @@ sub main(@){
     for my $ebookParser(@ebookParsers){
       if($ebookParser eq "cr3"){
         $$ebookParsedContentCacheFiles{cr3} =
-          ensureEbookCoolreaderSentenceInfoCacheFile($ebookFile, $fileInfoCache);
+          ensureCacheFileEbookCoolreaderSentenceInfo($ebookFile, $fileInfoCache);
       }
       if($ebookParser eq "pandoc"){
         $$ebookParsedContentCacheFiles{pandoc} =
-          ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
+          ensureCacheFileEbookPandocPlaintext($ebookFile, $fileInfoCache);
       }
     }
     my $ebookWordFile = getEbookWordFile($ebookParsedContentCacheFiles);
@@ -253,11 +253,11 @@ sub main(@){
       for my $ebookParser(@ebookParsers){
         if($ebookParser eq "cr3"){
           $$ebookParsedContentCacheFiles{cr3} =
-            ensureEbookCoolreaderSentenceInfoCacheFile($ebookFile, $fileInfoCache);
+            ensureCacheFileEbookCoolreaderSentenceInfo($ebookFile, $fileInfoCache);
         }
         if($ebookParser eq "pandoc"){
           $$ebookParsedContentCacheFiles{pandoc} =
-            ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
+            ensureCacheFileEbookPandocPlaintext($ebookFile, $fileInfoCache);
         }
       }
 
@@ -281,7 +281,7 @@ sub main(@){
     }
     my $fileInfoCache = readFileInfoCache();
     for my $audioFile(@audiobookFiles){
-      my $cacheFile = ensureVoskWordsCacheFile($audioFile, $fileInfoCache);
+      my $cacheFile = ensureCacheFileAudiobookVoskWordsJson($audioFile, $fileInfoCache);
       print "cached $audioFile => $cacheFile\n";
     }
   }else{
@@ -341,7 +341,7 @@ sub getAudiobookWordFile(@){
   return $tmpAudiobookWordsFile;
 }
 
-sub ensureEbookCoolreaderSentenceInfoCacheFile($$){
+sub ensureCacheFileEbookCoolreaderSentenceInfo($$){
   my ($ebookFile, $fileInfoCache) = @_;
   my $fileInfo = ensureFileInfoCache($ebookFile, $fileInfoCache);
   my $md5 = $$fileInfo{md5};
@@ -375,7 +375,7 @@ sub ensureEbookCoolreaderSentenceInfoCacheFile($$){
   return $ebookCoolreaderSentenceInfoCacheFile;
 }
 
-sub ensureEbookPandocPlaintextCacheFile($$){
+sub ensureCacheFileEbookPandocPlaintext($$){
   my ($ebookFile, $fileInfoCache) = @_;
   my $fileInfo = ensureFileInfoCache($ebookFile, $fileInfoCache);
   my $md5 = $$fileInfo{md5};
@@ -408,7 +408,7 @@ sub ensureEbookPandocPlaintextCacheFile($$){
   return $ebookPandocPlaintextCacheFile;
 }
 
-sub ensureVoskWordsCacheFile($$){
+sub ensureCacheFileAudiobookVoskWordsJson($$){
   my ($audioFile, $fileInfoCache) = @_;
   die "ERROR: $audioFile not found\n" if not -f $audioFile;
   my $fileInfo = ensureFileInfoCache($audioFile, $fileInfoCache);
