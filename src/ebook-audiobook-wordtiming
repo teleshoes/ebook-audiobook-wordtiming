@@ -122,8 +122,12 @@ my $USAGE = "Usage:
 sub getEbookWordFile($);
 sub getAudiobookWordFile(@);
 sub ensureCacheFileEbookCoolreaderSentenceInfo($$);
+sub runCoolreaderSentenceInfo($$);
 sub ensureCacheFileEbookPandocPlaintext($$);
+sub runPandocPlaintext($$);
 sub ensureCacheFileAudiobookVoskWordsJson($$);
+sub runVoskWordsJson($$);
+sub ensureCacheFile($$$$$);
 sub getEbookWordFileTimestamps($$@);
 sub getCleanFileName($);
 sub globFirst($);
@@ -343,121 +347,107 @@ sub getAudiobookWordFile(@){
 
 sub ensureCacheFileEbookCoolreaderSentenceInfo($$){
   my ($ebookFile, $fileInfoCache) = @_;
-  my $fileInfo = ensureFileInfoCache($ebookFile, $fileInfoCache);
-  my $md5 = $$fileInfo{md5};
-  my $ebookCoolreaderSentenceInfoCacheFile =
-    globFirst "$CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO/*-$md5.sentenceinfo*";
-  if(defined $ebookCoolreaderSentenceInfoCacheFile){
-    return $ebookCoolreaderSentenceInfoCacheFile;
-  }
-
-  if(not -d $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO){
-    run "mkdir", "-p", $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO;
-  }
-  if(not -d $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO){
-    die "ERROR: $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO does not exist\n";
-  }
-  my $cleanFileName = getCleanFileName($ebookFile);
-  $ebookCoolreaderSentenceInfoCacheFile =
-    "$CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO/$cleanFileName-$md5.sentenceinfo";
-
-  run "cr3", "--loglevel=INFO", "--get-sentence-info", $ebookFile, $ebookCoolreaderSentenceInfoCacheFile;
-  if(not -f $ebookCoolreaderSentenceInfoCacheFile){
-    die "ERROR: cache file $ebookCoolreaderSentenceInfoCacheFile does not exist\n";
-  }
-
-  run "xz", $ebookCoolreaderSentenceInfoCacheFile;
-  $ebookCoolreaderSentenceInfoCacheFile = "$ebookCoolreaderSentenceInfoCacheFile.xz";
-  if(not -f $ebookCoolreaderSentenceInfoCacheFile){
-    die "ERROR: cache file $ebookCoolreaderSentenceInfoCacheFile does not exist\n";
-  }
-
-  return $ebookCoolreaderSentenceInfoCacheFile;
+  return ensureCacheFile($ebookFile, $fileInfoCache,
+    "sentenceinfo", $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO, \&runCoolreaderSentenceInfo);
+}
+sub runCoolreaderSentenceInfo($$){
+  my ($srcEbookFile, $destSentenceInfoFile) = @_;
+  run "cr3", "--loglevel=INFO", "--get-sentence-info", $srcEbookFile, $destSentenceInfoFile;
 }
 
 sub ensureCacheFileEbookPandocPlaintext($$){
   my ($ebookFile, $fileInfoCache) = @_;
-  my $fileInfo = ensureFileInfoCache($ebookFile, $fileInfoCache);
-  my $md5 = $$fileInfo{md5};
-  my $ebookPandocPlaintextCacheFile = globFirst "$CACHE_DIR_EBOOK_PANDOC_PLAINTEXT/*-$md5.txt*";
-  if(defined $ebookPandocPlaintextCacheFile){
-    return $ebookPandocPlaintextCacheFile;
-  }
-
-  if(not -d $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT){
-    run "mkdir", "-p", $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT;
-  }
-  if(not -d $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT){
-    die "ERROR: $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT does not exist\n";
-  }
-  my $cleanFileName = getCleanFileName($ebookFile);
-  $ebookPandocPlaintextCacheFile = "$CACHE_DIR_EBOOK_PANDOC_PLAINTEXT/$cleanFileName-$md5.txt";
-
-
-  run "pandoc", "-t", "plain", $ebookFile, "-o", $ebookPandocPlaintextCacheFile;
-  if(not -f $ebookPandocPlaintextCacheFile){
-    die "ERROR: cache file $ebookPandocPlaintextCacheFile does not exist\n";
-  }
-
-  run "xz", $ebookPandocPlaintextCacheFile;
-  $ebookPandocPlaintextCacheFile = "$ebookPandocPlaintextCacheFile.xz";
-  if(not -f $ebookPandocPlaintextCacheFile){
-    die "ERROR: cache file $ebookPandocPlaintextCacheFile does not exist\n";
-  }
-
-  return $ebookPandocPlaintextCacheFile;
+  return ensureCacheFile($ebookFile, $fileInfoCache,
+   "txt", $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT, \&runPandocPlaintext);
+}
+sub runPandocPlaintext($$){
+  my ($srcEbookFile, $destPlaintextFile) = @_;
+  run "pandoc", "-t", "plain", $srcEbookFile, "-o", $destPlaintextFile;
 }
 
 sub ensureCacheFileAudiobookVoskWordsJson($$){
   my ($audioFile, $fileInfoCache) = @_;
-  die "ERROR: $audioFile not found\n" if not -f $audioFile;
-  my $fileInfo = ensureFileInfoCache($audioFile, $fileInfoCache);
-  my $md5 = $$fileInfo{md5};
-  my $voskWordsCacheFile = globFirst "$CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON/*-$md5.json*";
-  if(defined $voskWordsCacheFile){
-    return $voskWordsCacheFile;
-  }
+  return ensureCacheFile($audioFile, $fileInfoCache,
+    "json", $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON, \&runVoskWordsJson);
+}
+sub runVoskWordsJson($$){
+  my ($srcAudioFile, $destJSONFile) = @_;
 
-  if(not -d $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON){
-    run "mkdir", "-p", $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON;
-  }
-  if(not -d $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON){
-    die "ERROR: $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON does not exist\n";
-  }
-  my $cleanFileName = getCleanFileName($audioFile);
-  $voskWordsCacheFile = "$CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON/$cleanFileName-$md5.json";
+  my $inputWaveFile = undef;
+  my $deleteWaveFile = 0;
 
-  my $tmpWaveFile = undef;
-
-  my $fileType = `file "$audioFile"`;
-  if($fileType !~ /WAVE.*\bmono\b/){
+  my $origFileType = `file "$srcAudioFile"`;
+  if($origFileType =~ /WAVE.*\bmono\b/){
+    $inputWaveFile = $srcAudioFile;
+    $deleteWaveFile = 0;
+  }else{
     my $nowMillis = nowMillis();
     my $uuid = getUUID();
-    $tmpWaveFile = "/tmp/vosk-wav-file-$nowMillis-$uuid.wav";
-    system "ffmpeg", "-i", $audioFile, "-ac", "1", $tmpWaveFile;
+    my $tmpWaveFile = "/tmp/vosk-wav-file-$nowMillis-$uuid.wav";
+    system "ffmpeg", "-i", $srcAudioFile, "-ac", "1", $tmpWaveFile;
     if(not -f $tmpWaveFile){
-      die "ERROR: failed to create mono WAVE for $audioFile\n";
+      die "ERROR: failed to create mono WAVE for $srcAudioFile\n";
     }
-    $audioFile = $tmpWaveFile;
-    $fileType = `file "$audioFile"`;
+
+    $inputWaveFile = $tmpWaveFile;
+    $deleteWaveFile = 1;
   }
 
-  if($fileType !~ /WAVE.*\bmono\b/){
-    die "ERROR: $audioFile is not a mono WAVE\n";
+  my $wavFileType = `file "$inputWaveFile"`;
+  if($wavFileType !~ /WAVE.*\bmono\b/){
+    die "ERROR: $inputWaveFile is not a mono WAVE\n";
   }
 
-  run "vosk-words-json", $audioFile, "--output=$voskWordsCacheFile";
-  run "xz", $voskWordsCacheFile;
-  $voskWordsCacheFile = "$voskWordsCacheFile.xz";
-  if(not -f $voskWordsCacheFile){
-    die "ERROR: cache file $voskWordsCacheFile does not exist\n";
+  run "vosk-words-json", $inputWaveFile, "--output=$destJSONFile";
+
+  if($deleteWaveFile){
+    run "rm", $inputWaveFile;
+  }
+}
+
+sub ensureCacheFile($$$$$){
+  my ($file, $fileInfoCache, $fileExt, $cacheDir, $processFileSub) = @_;
+  die "ERROR: $file not found\n" if not -f $file;
+  my $fileInfo = ensureFileInfoCache($file, $fileInfoCache);
+  my $md5 = $$fileInfo{md5};
+  my $cacheFile = globFirst "$cacheDir/*-$md5.$fileExt.xz";
+  if(defined $cacheFile){
+    return $cacheFile;
   }
 
-  if(defined $tmpWaveFile){
-    run "rm", $tmpWaveFile;
+  if(not -d $cacheDir){
+    run "mkdir", "-p", $cacheDir;
+  }
+  if(not -d $cacheDir){
+    die "ERROR: $cacheDir does not exist\n";
+  }
+  my $cleanFileName = getCleanFileName($file);
+  if($cleanFileName eq ""){
+    $cleanFileName = "_";
+  }
+  $cacheFile = "$cacheDir/$cleanFileName-$md5.$fileExt";
+
+  if(-e $cacheFile){
+    die "ERROR: $cacheFile already exists, possible race condition\n";
   }
 
-  return $voskWordsCacheFile
+  &$processFileSub($file, $cacheFile);
+
+  if(not -f $cacheFile){
+    die "ERROR: $cacheFile does not exist after processing\n";
+  }
+
+  run "xz", $cacheFile;
+  my $cacheFileXZ = "$cacheFile.xz";
+
+  if(not -f $cacheFileXZ){
+    die "ERROR: $cacheFileXZ does not exist, compression failed\n";
+  }
+  if(-e $cacheFile){
+    die "ERROR: $cacheFile exists after compression\n";
+  }
+
+  return $cacheFileXZ;
 }
 
 sub getEbookWordFileTimestamps($$@){
