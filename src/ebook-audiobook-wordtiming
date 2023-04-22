@@ -9,6 +9,7 @@ use Time::HiRes qw(time);
 
 my $CACHE_BASE_DIR = "$ENV{HOME}/.cache/ebook-audiobook-wordtiming";
 my $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON = "$CACHE_BASE_DIR/audiobook-vosk-words-json";
+my $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO = "$CACHE_BASE_DIR/ebook-coolreader-sentenceinfo";
 my $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT = "$CACHE_BASE_DIR/ebook-pandoc-plaintext";
 
 my $FILE_INFO_CACHE = "$CACHE_BASE_DIR/file-info";
@@ -32,11 +33,14 @@ my $USAGE = "Usage:
       -ensure EBOOK_PARSED_CONTENT cache exists as in:
         $0 --cache-ebook EBOOK_FILE
       -select exactly one EBOOK_PARSER (see --ebook-parser):
+        cr3:    EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
         pandoc: EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
       -extract EBOOK_TEXT_SENTENCES from EBOOK_PARSED_CONTENT
         -remove any metadata/non-text/positioning info
+          -for COOLREADER_SENTENCE_INFO: remove sentence positioning info
           -for PANDOC_PLAINTEXT: nothing to remove
         -separate into sentences
+          -for COOLREADER_SENTENCE_INFO: treat each line is a parsed sentence
           -for PANDOC_PLAINTEXT: separate at periods, semi-colons, and multiple newlines
       -replace some unicode quote characters in EBOOK_TEXT_SENTENCES
       -write one word per line to EBOOK_WORDS_FILE
@@ -50,8 +54,15 @@ my $USAGE = "Usage:
 
   $0 [OPTS] --cache-ebook EBOOK_FILE [EBOOK_FILE EBOOK_FILE]
     -select EBOOK_PARSER(s) to generate EBOOK_PARSED_CONTENT, using the command PATH and OPTS
+        cr3:    EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
         pandoc: EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
     -for each EBOOK_FILE:
+      -if EBOOK_PARSER cr3 enabled:
+        -check for cached COOLREADER_SENTENCE_INFO
+          -if not cached:
+            -parse EBOOK_FILE into sentences with `cr3 --get-sentence-info EBOOK_FILE CACHE_FILE`
+            -compress CACHE_FILE and store result in cache dir:
+             $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO
       -if EBOOK_PARSER pandoc enabled:
         -check for cached PANDOC_PLAINTEXT
           -if not cached:
@@ -82,9 +93,13 @@ my $USAGE = "Usage:
     --ebook-parser-first
       (this is the default)
       check command PATH for each EBOOK_PARSER, and use only the first available
+      EBOOK_PARSER=cr3
+        check `cr3` on command PATH
       EBOOK_PARSER=pandoc
         check `pandoc` on command PATH
 
+    --cr3
+      same as: --ebook-parser=cr3
     --pandoc
       same as: --ebook-parser=pandoc
 
@@ -96,6 +111,9 @@ my $USAGE = "Usage:
               but only the highest-listed below is used to generate EBOOK_WORDS_FILE.
 
     EBOOK_PARSER is one of:
+      cr3
+        get EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
+        using: `cr3 --get-sentence-info ...`
       pandoc
         get EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
         using: `pandoc -t plain ...`
@@ -103,6 +121,7 @@ my $USAGE = "Usage:
 
 sub getEbookWordFile($);
 sub getAudiobookWordFile(@);
+sub ensureEbookCoolreaderSentenceInfoCacheFile($$);
 sub ensureEbookPandocPlaintextCacheFile($$);
 sub ensureVoskWordsCacheFile($$);
 sub getEbookWordFileTimestamps($$@);
@@ -149,6 +168,9 @@ sub main(@){
     }elsif($arg =~ /^--ebook-parser=(.+)$/){
       push @ebookParsers, $1;
       $checkParserPaths = 0;
+    }elsif($arg =~ /^(--cr3)$/){
+      push @ebookParsers, "cr3";
+      $checkParserPaths = 0;
     }elsif($arg =~ /^(--pandoc)$/){
       push @ebookParsers, "pandoc";
       $checkParserPaths = 0;
@@ -159,6 +181,10 @@ sub main(@){
     }
   }
 
+  if($checkParserPaths and isExecAvailable("cr3")){
+    @ebookParsers = ("cr3");
+    $checkParserPaths = 0;
+  }
   if($checkParserPaths and isExecAvailable("pandoc")){
     @ebookParsers = ("pandoc");
     $checkParserPaths = 0;
@@ -199,6 +225,10 @@ sub main(@){
 
     my $ebookParsedContentCacheFiles = {};
     for my $ebookParser(@ebookParsers){
+      if($ebookParser eq "cr3"){
+        $$ebookParsedContentCacheFiles{cr3} =
+          ensureEbookCoolreaderSentenceInfoCacheFile($ebookFile, $fileInfoCache);
+      }
       if($ebookParser eq "pandoc"){
         $$ebookParsedContentCacheFiles{pandoc} =
           ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
@@ -221,6 +251,10 @@ sub main(@){
     for my $ebookFile(@ebookFiles){
       my $ebookParsedContentCacheFiles = {};
       for my $ebookParser(@ebookParsers){
+        if($ebookParser eq "cr3"){
+          $$ebookParsedContentCacheFiles{cr3} =
+            ensureEbookCoolreaderSentenceInfoCacheFile($ebookFile, $fileInfoCache);
+        }
         if($ebookParser eq "pandoc"){
           $$ebookParsedContentCacheFiles{pandoc} =
             ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
@@ -264,6 +298,13 @@ sub getEbookWordFile($){
   my $tmpEbookWordsFile = "/tmp/ebook-words-$nowMillis-$uuid.txt";
 
   my @sentences;
+  if(@sentences == 0 and defined $$ebookParsedContentCacheFiles{cr3}){
+    my $content = readFileXZ $$ebookParsedContentCacheFiles{cr3};
+    $content =~ s/’/'/g;
+    $content =~ s/^[^,]*,//gm; #remove sentence start position info
+
+    @sentences = split /[\r\n]+/, $content;
+  }
   if(@sentences == 0 and defined $$ebookParsedContentCacheFiles{pandoc}){
     my $content = readFileXZ $$ebookParsedContentCacheFiles{pandoc};
     $content =~ s/’/'/g;
@@ -298,6 +339,40 @@ sub getAudiobookWordFile(@){
   }
   writeFile $tmpAudiobookWordsFile, $wordContent;
   return $tmpAudiobookWordsFile;
+}
+
+sub ensureEbookCoolreaderSentenceInfoCacheFile($$){
+  my ($ebookFile, $fileInfoCache) = @_;
+  my $fileInfo = ensureFileInfoCache($ebookFile, $fileInfoCache);
+  my $md5 = $$fileInfo{md5};
+  my $ebookCoolreaderSentenceInfoCacheFile =
+    globFirst "$CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO/*-$md5.sentenceinfo*";
+  if(defined $ebookCoolreaderSentenceInfoCacheFile){
+    return $ebookCoolreaderSentenceInfoCacheFile;
+  }
+
+  if(not -d $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO){
+    run "mkdir", "-p", $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO;
+  }
+  if(not -d $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO){
+    die "ERROR: $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO does not exist\n";
+  }
+  my $cleanFileName = getCleanFileName($ebookFile);
+  $ebookCoolreaderSentenceInfoCacheFile =
+    "$CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO/$cleanFileName-$md5.sentenceinfo";
+
+  run "cr3", "--loglevel=INFO", "--get-sentence-info", $ebookFile, $ebookCoolreaderSentenceInfoCacheFile;
+  if(not -f $ebookCoolreaderSentenceInfoCacheFile){
+    die "ERROR: cache file $ebookCoolreaderSentenceInfoCacheFile does not exist\n";
+  }
+
+  run "xz", $ebookCoolreaderSentenceInfoCacheFile;
+  $ebookCoolreaderSentenceInfoCacheFile = "$ebookCoolreaderSentenceInfoCacheFile.xz";
+  if(not -f $ebookCoolreaderSentenceInfoCacheFile){
+    die "ERROR: cache file $ebookCoolreaderSentenceInfoCacheFile does not exist\n";
+  }
+
+  return $ebookCoolreaderSentenceInfoCacheFile;
 }
 
 sub ensureEbookPandocPlaintextCacheFile($$){
