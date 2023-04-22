@@ -186,11 +186,13 @@ sub getEbookWordFile($){
   my $uuid = getUUID();
   my $tmpEbookWordsFile = "/tmp/ebook-words-$nowMillis-$uuid.txt";
 
+  my @sentences;
   my $content = readFileXZ $ebookPandocPlaintextCacheFile;
   $content =~ s/’/'/g;
 
+  @sentences = split /(\.|\n\n+|;)/, $content;
+
   my $wordContent = "";
-  my @sentences = split /(\.|\n\n+|;)/, $content;
   for my $sentence(@sentences){
     my @words = grep {/\w/} split /[^a-z0-9']/, lc $sentence;
     for my $word(@words){
