@@ -13,6 +13,7 @@ my $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT = "$CACHE_BASE_DIR/ebook-pandoc-plaintext";
 
 my $FILE_INFO_CACHE = "$CACHE_BASE_DIR/file-info";
 my $MODE_CALC = "calc";
+my $MODE_CACHE_EBOOK = "cache-ebook";
 my $MODE_CACHE_AUDIOBOOK = "cache-audiobook";
 
 my $USAGE = "Usage:
@@ -28,7 +29,9 @@ my $USAGE = "Usage:
       -write all words from all AUDIOBOOK_FILEs, one word per line
       -store an array with the source file and start time
     -create an EBOOK_WORDS_FILE
-      -parse EBOOK_FILE into plaintext with `pandoc`
+      -ensure PANDOC_PLAINTEXT cache exists as in:
+        $0 --cache-ebook EBOOK_FILE
+      -extract EBOOK_TEXT from PANDOC_PLAINTEXT
       -replace some unicode quote characters
       -parse all segments of letters/numbers/single-quotes
       -convert all words to lowercase and write to EBOOK_WORDS_FILE, one word per line
@@ -36,6 +39,13 @@ my $USAGE = "Usage:
       -write a file with one line per word from EBOOK_WORDS_FILE, formated:
         START_TIME_SECONDS,WORD,FILE_BASE_NAME
       -where START_TIME_SECONDS and FILE_BASE_NAME is from the closest matching audiobook word
+
+  $0 [OPTS] --cache-ebook EBOOK_FILE [EBOOK_FILE EBOOK_FILE]
+    -for each EBOOK_FILE:
+      -check for cached PANDOC_PLAINTEXT
+        -if not cached:
+          -parse EBOOK_FILE into plaintext with `pandoc -t plain EBOOK_FILE -o CACHE_FILE`
+          -compress CACHE_FILE and store resut in cache
 
   $0 [OPTS] --cache-audiobook AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
     -for each AUDIOBOOK_FILE:
@@ -87,6 +97,8 @@ sub main(@){
       $outputFile = shift @_;
     }elsif($arg =~ /^--output=(.+)$/){
       $outputFile = $1;
+    }elsif($arg =~ /^(--cache-ebook)$/){
+      $mode = $MODE_CACHE_EBOOK;
     }elsif($arg =~ /^(--cache-audiobook)$/){
       $mode = $MODE_CACHE_AUDIOBOOK;
     }elsif($arg =~ /^(--meld)$/){
@@ -142,6 +154,14 @@ sub main(@){
     print $fmt;
     if(defined $outputFile){
       writeFile $outputFile, $fmt;
+    }
+  }elsif($mode eq $MODE_CACHE_EBOOK){
+    my @ebookFiles = @files;
+    my $fileInfoCache = readFileInfoCache();
+    for my $ebookFile(@ebookFiles){
+      my $pandocPlaintextCacheFile =
+        ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
+      print "cached $ebookFile => $pandocPlaintextCacheFile\n";
     }
   }elsif($mode eq $MODE_CACHE_AUDIOBOOK){
     my @audiobookFiles = @files;
