@@ -29,23 +29,37 @@ my $USAGE = "Usage:
       -write all words from all AUDIOBOOK_FILEs, one word per line
       -store an array with the source file and start time
     -create an EBOOK_WORDS_FILE
-      -ensure PANDOC_PLAINTEXT cache exists as in:
+      -ensure EBOOK_PARSED_CONTENT cache exists as in:
         $0 --cache-ebook EBOOK_FILE
-      -extract EBOOK_TEXT from PANDOC_PLAINTEXT
-      -replace some unicode quote characters
-      -parse all segments of letters/numbers/single-quotes
-      -convert all words to lowercase and write to EBOOK_WORDS_FILE, one word per line
+      -select exactly one EBOOK_PARSER (see --ebook-parser):
+        pandoc: EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
+      -extract EBOOK_TEXT_SENTENCES from EBOOK_PARSED_CONTENT
+        -remove any metadata/non-text/positioning info
+          -for PANDOC_PLAINTEXT: nothing to remove
+        -separate into sentences
+          -for PANDOC_PLAINTEXT: separate at periods, semi-colons, and multiple newlines
+      -replace some unicode quote characters in EBOOK_TEXT_SENTENCES
+      -write one word per line to EBOOK_WORDS_FILE
+        -for each sentence inf EBOOK_TEXT_SENTENCES:
+          -parse all substrings of letters/numbers/single-quotes as 'words'
+          -convert words to lowercase and write to EBOOK_WORDS_FILE
     -diff EBOOK_WORDS_FILE and AUDIOBOOK_WORDS_FILE with `diff -y`
       -write a file with one line per word from EBOOK_WORDS_FILE, formated:
         START_TIME_SECONDS,WORD,FILE_BASE_NAME
       -where START_TIME_SECONDS and FILE_BASE_NAME is from the closest matching audiobook word
 
   $0 [OPTS] --cache-ebook EBOOK_FILE [EBOOK_FILE EBOOK_FILE]
+    -select EBOOK_PARSER(s) to generate EBOOK_PARSED_CONTENT, using the command PATH and OPTS
+        pandoc: EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
     -for each EBOOK_FILE:
-      -check for cached PANDOC_PLAINTEXT
-        -if not cached:
-          -parse EBOOK_FILE into plaintext with `pandoc -t plain EBOOK_FILE -o CACHE_FILE`
-          -compress CACHE_FILE and store resut in cache
+      -if EBOOK_PARSER pandoc enabled:
+        -check for cached PANDOC_PLAINTEXT
+          -if not cached:
+            -parse EBOOK_FILE into plaintext with `pandoc -t plain EBOOK_FILE -o CACHE_FILE`
+            -compress CACHE_FILE and store result in:
+             $CACHE_DIR_EBOOK_PANDOC_PLAINTEXT
+      -if no EBOOK_PARSER is available:
+        -fail with an error message
 
   $0 [OPTS] --cache-audiobook AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
     -for each AUDIOBOOK_FILE:
@@ -53,7 +67,9 @@ my $USAGE = "Usage:
         -if not cached:
           -convert AUDIOBOOK_FILE to mono WAVE (if it is not already)
           -generate Vosk result data, with timing for each word, with `vosk-words-json`
-          -compress and store resut in cache (about 100KiB, compressed, per hour of audiobook)
+          -compress and store resut in cache dir:
+           $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON
+           (about 100KiB, compressed, per hour of audiobook)
 
   OPTS
     -o OUTPUT_FILE | --output=OUTPUT_FILE
@@ -62,6 +78,27 @@ my $USAGE = "Usage:
     --meld
       before outputting word timings, open meld to view diff of ebook+audiobooks words
         run: `meld EBOOK_WORDS_FILE AUDIOBOOK_WORD_FILE`
+
+    --ebook-parser-first
+      (this is the default)
+      check command PATH for each EBOOK_PARSER, and use only the first available
+      EBOOK_PARSER=pandoc
+        check `pandoc` on command PATH
+
+    --pandoc
+      same as: --ebook-parser=pandoc
+
+    --ebook-parser=EBOOK_PARSER
+      force use of specific EBOOK_PARSER, without checking PATH
+
+      NOTE: If multiple parsers are enabled with --ebook-parser=*,
+              they are all are generated+cached,
+              but only the highest-listed below is used to generate EBOOK_WORDS_FILE.
+
+    EBOOK_PARSER is one of:
+      pandoc
+        get EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
+        using: `pandoc -t plain ...`
 ";
 
 sub getEbookWordFile($);
@@ -79,6 +116,7 @@ sub getMountpointOfFile($);
 sub md5sum($);
 sub readFile($);
 sub readFileXZ($);
+sub isExecAvailable($);
 sub writeFile($$);
 sub nowMillis();
 sub run(@);
@@ -88,6 +126,8 @@ sub main(@){
   my $outputFile;
   my $meld = 0;
   my $mode = $MODE_CALC;
+  my $checkParserPaths = 1;
+  my @ebookParsers = ();
   while(@_ > 0){
     my $arg = shift;
     if($arg =~ /^(-h|--help)$/){
@@ -103,11 +143,25 @@ sub main(@){
       $mode = $MODE_CACHE_AUDIOBOOK;
     }elsif($arg =~ /^(--meld)$/){
       $meld = 1;
+    }elsif($arg =~ /^(--ebook-parser-first)$/){
+      $checkParserPaths = 1;
+      @ebookParsers = ();
+    }elsif($arg =~ /^--ebook-parser=(.+)$/){
+      push @ebookParsers, $1;
+      $checkParserPaths = 0;
+    }elsif($arg =~ /^(--pandoc)$/){
+      push @ebookParsers, "pandoc";
+      $checkParserPaths = 0;
     }elsif(-f $arg){
       push @files, $arg;
     }else{
       die "$USAGE\nERROR: unknown arg $arg\n";
     }
+  }
+
+  if($checkParserPaths and isExecAvailable("pandoc")){
+    @ebookParsers = ("pandoc");
+    $checkParserPaths = 0;
   }
 
   if($mode eq $MODE_CALC){
@@ -143,8 +197,14 @@ sub main(@){
     }
     my $audiobookWordFile = getAudiobookWordFile(@audiobookWordInfo);
 
-    my $ebookPandocPlaintextCacheFile = ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
-    my $ebookWordFile = getEbookWordFile($ebookPandocPlaintextCacheFile);
+    my $ebookParsedContentCacheFiles = {};
+    for my $ebookParser(@ebookParsers){
+      if($ebookParser eq "pandoc"){
+        $$ebookParsedContentCacheFiles{pandoc} =
+          ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
+      }
+    }
+    my $ebookWordFile = getEbookWordFile($ebookParsedContentCacheFiles);
 
     if($meld){
       system "meld", $ebookWordFile, $audiobookWordFile;
@@ -159,9 +219,26 @@ sub main(@){
     my @ebookFiles = @files;
     my $fileInfoCache = readFileInfoCache();
     for my $ebookFile(@ebookFiles){
-      my $pandocPlaintextCacheFile =
-        ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
-      print "cached $ebookFile => $pandocPlaintextCacheFile\n";
+      my $ebookParsedContentCacheFiles = {};
+      for my $ebookParser(@ebookParsers){
+        if($ebookParser eq "pandoc"){
+          $$ebookParsedContentCacheFiles{pandoc} =
+            ensureEbookPandocPlaintextCacheFile($ebookFile, $fileInfoCache);
+        }
+      }
+
+      my @cachedParsers = sort keys %$ebookParsedContentCacheFiles;
+      if(@cachedParsers == 0){
+        die "ERROR: did not cache any EBOOK_PARSED_CONTENT for $ebookFile\n";
+      }
+      for my $parser(@cachedParsers){
+        my $cacheFile = $$ebookParsedContentCacheFiles{$parser};
+        if(defined $cacheFile){
+          print "cached $parser EBOOK_PARSED_CONTENT for $ebookFile\n";
+        }else{
+          die "ERROR: did not cache $parser EBOOK_PARSED_CONTENT for $ebookFile\n";
+        }
+      }
     }
   }elsif($mode eq $MODE_CACHE_AUDIOBOOK){
     my @audiobookFiles = @files;
@@ -180,17 +257,23 @@ sub main(@){
 
 
 sub getEbookWordFile($){
-  my ($ebookPandocPlaintextCacheFile) = @_;
+  my ($ebookParsedContentCacheFiles) = @_;
 
   my $nowMillis = nowMillis();
   my $uuid = getUUID();
   my $tmpEbookWordsFile = "/tmp/ebook-words-$nowMillis-$uuid.txt";
 
   my @sentences;
-  my $content = readFileXZ $ebookPandocPlaintextCacheFile;
-  $content =~ s/’/'/g;
+  if(@sentences == 0 and defined $$ebookParsedContentCacheFiles{pandoc}){
+    my $content = readFileXZ $$ebookParsedContentCacheFiles{pandoc};
+    $content =~ s/’/'/g;
 
-  @sentences = split /(\.|\n\n+|;)/, $content;
+    @sentences = split /(\.|\n\n+|;)/, $content;
+  }
+
+  if(@sentences == 0){
+    die "ERROR: no EBOOK_PARSED_CONTENT found\n";
+  }
 
   my $wordContent = "";
   for my $sentence(@sentences){
@@ -470,6 +553,12 @@ sub writeFile($$){
   open FH, "> $file" or die "ERROR: could not write $file\n$!\n";
   print FH $contents;
   close FH;
+}
+
+sub isExecAvailable($){
+  my ($exec) = @_;
+  system "type \"$exec\" >/dev/null 2>/dev/null";
+  return $? == 0 ? 1 : 0;
 }
 
 sub nowMillis(){
