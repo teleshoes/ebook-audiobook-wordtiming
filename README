@@ -1,0 +1,28 @@
+ebook-audiobook-wordtiming
+Copyright 2023 Elliot Wolk
+License: GPLv2 or GPLv3
+
+vosk-words-json
+Copyright 2023 Elliot Wolk
+License: GPLv2 or GPLv3
+
+This is a tool for fuzzy-matching the spoken words of an audiobook (mp3/ogg/flac/wav/m4a/etc),
+to the text of an ebook (epub/fb2/mobi/txt/etc).
+
+The output is a wordtiming file, one line per word,
+with the words from the EBOOK, and start time in fractional seconds from the AUDIOBOOK.
+
+The intended purpose is to allow ebook-readers to read the audiobook aloud, or audiobook players to show the text.
+An implementation using these wordtiming files exists for the android version of the ebook reader, coolreader.
+
+The external tools involved are:
+  vosk - speech to text tool with optional per-word statistics (apache licensed)
+  diff - GNU diff, to find the Longest Common Subsequence and align ebook-words and audiobook-words
+  vosk-words-json - a simple python wrapper around vosk to print per-word statistics
+  ffmpeg - convert audio files to mono WAVE for vosk
+  pandoc - convert ebooks to plaintext
+  cr3 - (optional) coolreader, to convert ebooks to plaintext (instead of pandoc, for better use with cr3)
+  md5sum - for use in caching
+  xz-utils - for LZMA compression
+
+The script is currently unix-only, and possibly GNU/Linux only.
