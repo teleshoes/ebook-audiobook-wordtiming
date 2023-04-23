@@ -51,7 +51,7 @@ my $USAGE = "Usage:
           -parse all substrings of letters/numbers/single-quotes as 'words'
           -convert words to lowercase and write to EBOOK_WORDS_FILE
     -diff EBOOK_WORDS_FILE and AUDIOBOOK_WORDS_FILE with `diff -y`
-      -write a file with one line per word from EBOOK_WORDS_FILE, formated:
+      -write OUTPUT_WORDTIMING_FILE with one line per word from EBOOK_WORDS_FILE, formated:
         START_TIME_SECONDS,WORD,FILE_BASE_NAME
       -where START_TIME_SECONDS and FILE_BASE_NAME is from the closest matching audiobook word
 
@@ -86,8 +86,10 @@ my $USAGE = "Usage:
            (about 100KiB, compressed, per hour of audiobook)
 
   OPTS
-    -o OUTPUT_FILE | --output=OUTPUT_FILE
-      write the final ebook words + audiobook start times to OUTPUT_FILE in addition to the console
+    -o OUTPUT_WORDTIMING_FILE | --output-wordtiming=OUTPUT_FILE
+      write the final wordtiming (ebook words + audiobook start times) to OUTPUT_FILE
+      default is EBOOK_FILE, with any file extension removed, and .wordtiming appended
+        e.g. path/to/books/tale_of_two_cities.epub => path/to/books/tale_of_two_cities.wordtiming
 
     --meld
       before outputting word timings, open meld to view diff of ebook+audiobooks words
@@ -149,7 +151,7 @@ sub run(@);
 
 sub main(@){
   my @files;
-  my $outputFile;
+  my $outputWordtimingFile;
   my $meld = 0;
   my $mode = $MODE_WORDTIMING;
   my $checkParserPaths = 1;
@@ -159,10 +161,10 @@ sub main(@){
     if($arg =~ /^(-h|--help)$/){
       print $USAGE;
       exit 0;
-    }elsif($arg =~ /^(-o|--output)$/ and @_ > 0){
-      $outputFile = shift @_;
-    }elsif($arg =~ /^--output=(.+)$/){
-      $outputFile = $1;
+    }elsif($arg =~ /^(-o|--output-wordtiming)$/ and @_ > 0){
+      $outputWordtimingFile = shift @_;
+    }elsif($arg =~ /^--output-wordtiming=(.+)$/){
+      $outputWordtimingFile = $1;
     }elsif($arg =~ /^(--cache-ebook)$/){
       $mode = $MODE_CACHE_EBOOK;
     }elsif($arg =~ /^(--cache-audiobook)$/){
@@ -247,11 +249,16 @@ sub main(@){
       system "meld", $ebookWordFile, $audiobookWordFile;
     }
 
-    my $fmt = getEbookWordFileTimestamps($ebookWordFile, $audiobookWordFile, @audiobookWordInfo);
-    print $fmt;
-    if(defined $outputFile){
-      writeFile $outputFile, $fmt;
+    if(not defined $outputWordtimingFile){
+      $outputWordtimingFile = $ebookFile;
+      $outputWordtimingFile =~ s/\.\w+$//;
+      $outputWordtimingFile .= ".wordtiming";
+      if(-e $outputWordtimingFile){
+        die "ERROR: $outputWordtimingFile already exists\n";
+      }
     }
+    my $fmt = getEbookWordFileTimestamps($ebookWordFile, $audiobookWordFile, @audiobookWordInfo);
+    writeFile $outputWordtimingFile, $fmt;
   }elsif($mode eq $MODE_CACHE_EBOOK){
     my @ebookFiles = @files;
     my $fileInfoCache = readFileInfoCache();
