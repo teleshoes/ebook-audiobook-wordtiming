@@ -17,6 +17,8 @@ my $MODE_CALC = "calc";
 my $MODE_CACHE_EBOOK = "cache-ebook";
 my $MODE_CACHE_AUDIOBOOK = "cache-audiobook";
 
+my $PYTHON_VOSK_VENV = "/opt/python-vosk";
+
 my $USAGE = "Usage:
   $0 -h | --help
     show this message
@@ -398,7 +400,12 @@ sub runVoskWordsJson($$){
     die "ERROR: $inputWaveFile is not a mono WAVE\n";
   }
 
-  run "vosk-words-json", $inputWaveFile, "--output=$destJSONFile";
+  my @voskCmd = ("vosk-words-json", $inputWaveFile, "--output=$destJSONFile");
+
+  if(-x "$PYTHON_VOSK_VENV/bin/python3"){
+    @voskCmd = ("$PYTHON_VOSK_VENV/bin/python3", @voskCmd);
+  }
+  run @voskCmd;
 
   if($deleteWaveFile){
     run "rm", $inputWaveFile;
