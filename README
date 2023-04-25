@@ -26,3 +26,146 @@ The external tools involved are:
   xz-utils - for LZMA compression
 
 The script is currently unix-only, and possibly GNU/Linux only.
+
+=====
+
+Usage:
+  ebook-audiobook-wordtiming -h | --help
+    show this message
+
+  ebook-audiobook-wordtiming [OPTS] EBOOK_FILE AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
+    Compare EBOOK_FILE and AUDIOBOOK_FILE(s), and generate an OUTPUT_WORDTIMING_FILE,
+      containing each word in the *EBOOK*,
+      with the best-guess start-time and filename from the *AUDIOBOOK*.
+    Also generate OUTPUT_SENTENCEINFO_FILE if coolreader is used,
+      containing one line per sentence (selectable segment) in the ebook,
+      with the coolreader DOM position of that sentence in the ebook.
+
+    (1) AUDIOBOOK_FILE_VOSK_DATA - raw JSON from python-vosk
+        -for each AUDIOBOOK_FILE:
+          -ensure AUDIOBOOK_FILE_VOSK_DATA cache exists as in:
+            ebook-audiobook-wordtiming --cache-audiobook AUDIOBOOK_FILE_VOSK_DATA
+            (runs external tool vosk-words-json, which performs speech-to-text)
+          -read AUDIOBOOK_FILE_VOSK_DATA from cache
+    (2) AUDIOBOOK_WORDTIMING - spoken word timings for each word in audiobook
+        -for each AUDIOBOOK_FILE
+          -parse AUDIOBOOK_FILE_VOSK_DATA into AUDIOBOOK_WORDTIMING
+          -for each parsed word in AUDIOBOOK_FILE, fetch:
+            -AUDIOBOOK_WORD
+            -AUDIOBOOK_FILE
+            -AUDIOBOOK_START_POS
+    (3) AUDIOBOOK_WORDS_FILE - file containing just the words in audiobook
+        -create AUDIOBOOK_WORDS_FILE from AUDIOBOOK_WORDTIMING
+          -write just AUDIOBOOK_WORD, one word per line
+    (4) EBOOK_PARSED_CONTENT - structured data containing plaintext ebook text
+        -ensure EBOOK_PARSED_CONTENT cache exists as in:
+          ebook-audiobook-wordtiming --cache-ebook EBOOK_FILE
+          (runs one or more external EBOOK_PARSER commands)
+        -select exactly one EBOOK_PARSER (see --ebook-parser):
+          cr3:    EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
+          pandoc: EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
+        -extract EBOOK_TEXT_SENTENCES from EBOOK_PARSED_CONTENT
+          -remove any metadata/non-text/positioning info
+            -for COOLREADER_SENTENCE_INFO: remove sentence positioning info
+            -for PANDOC_PLAINTEXT: nothing to remove
+          -separate into sentences
+            -for COOLREADER_SENTENCE_INFO: treat each line is a parsed sentence
+            -for PANDOC_PLAINTEXT: separate at periods, semi-colons, and multiple newlines
+        -if COOLREADER_SENTENCE_INFO is available:
+          -write COOLREADER_SENTENCE_INFO to OUTPUT_SENTENCEINFO_FILE
+    (5) EBOOK_WORDS_FILE - file containing just the words in ebook
+        -replace some unicode quote characters in EBOOK_TEXT_SENTENCES
+        -write one word per line to EBOOK_WORDS_FILE
+          -for each sentence inf EBOOK_TEXT_SENTENCES:
+            -parse all substrings of letters/numbers/single-quotes as 'words'
+            -convert words to lowercase and write to EBOOK_WORDS_FILE
+    (6) EBOOK_AUDIOBOOK_WORDS_DIFF - annotated diff of EBOOK_WORDS_FILE and AUDIOBOOK_WORDS_FILE
+        -find the longest common subsequence of EBOOK_WORDS_FILE and AUDIOBOOK_WORDS_FILE
+          -use: `diff -y EBOOK_WORDS_FILE AUDIOBOOK_WORDS_FILE`
+        -each line is one word, with a status:
+          ebook-only, audiobook-only, similar, identical
+    (7) OUTPUT_WORDTIMING_FILE - each word from ebook with start time+file from audiobook
+        -for each EBOOK_WORD, get the closest audiobook word using EBOOK_AUDIOBOOK_WORDS_DIFF:
+          -for all lines with status 'identical', match the ebook word to that audiobook word
+          -for all lines with status 'similar', match the ebook word to that audiobook word
+          -for all ebook-only lines, match that ebook word with the previously matched audiobook word
+            (or the first audiobook word if none are matched)
+          -discard all audiobook-only lines
+        -for each EBOOK_WORD, get timing and format word:
+          -extract AUDIOBOOK_FILE and AUDIOBOOK_START_POS from AUDIOBOOK_WORDTIMING
+          -format line as AUDIOBOOK_START_POS,EBOOK_WORD,AUDIOBOOK_FILE
+          -write line to OUTPUT_WORDTIMING_FILE
+
+  ebook-audiobook-wordtiming [OPTS] --cache-ebook EBOOK_FILE [EBOOK_FILE EBOOK_FILE]
+    -select EBOOK_PARSER(s) to generate EBOOK_PARSED_CONTENT, using the command PATH and OPTS
+        cr3:    EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
+        pandoc: EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
+    -for each EBOOK_FILE:
+      -if EBOOK_PARSER cr3 enabled:
+        -check for cached COOLREADER_SENTENCE_INFO
+          -if not cached:
+            -parse EBOOK_FILE into sentences with `cr3 --get-sentence-info EBOOK_FILE CACHE_FILE`
+            -compress CACHE_FILE and store result in cache dir:
+             /home/wolke/.cache/ebook-audiobook-wordtiming/ebook-coolreader-sentenceinfo
+      -if EBOOK_PARSER pandoc enabled:
+        -check for cached PANDOC_PLAINTEXT
+          -if not cached:
+            -parse EBOOK_FILE into plaintext with `pandoc -t plain EBOOK_FILE -o CACHE_FILE`
+            -compress CACHE_FILE and store result in:
+             /home/wolke/.cache/ebook-audiobook-wordtiming/ebook-pandoc-plaintext
+      -if no EBOOK_PARSER is available:
+        -fail with an error message
+
+  ebook-audiobook-wordtiming [OPTS] --cache-audiobook AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
+    -for each AUDIOBOOK_FILE:
+      -check for cached Vosk data
+        -if not cached:
+          -convert AUDIOBOOK_FILE to mono WAVE (if it is not already)
+          -generate Vosk result data, with timing for each word, with `vosk-words-json`
+          -compress and store resut in cache dir:
+           /home/wolke/.cache/ebook-audiobook-wordtiming/audiobook-vosk-words-json
+           (about 100KiB, compressed, per hour of audiobook)
+
+  OPTS
+    -o OUTPUT_WORDTIMING_FILE | --output-wordtiming=OUTPUT_FILE
+      write the final wordtiming (ebook words + audiobook start times) to OUTPUT_FILE
+      default is EBOOK_FILE, with any file extension removed, and .wordtiming appended
+        e.g. path/to/books/tale_of_two_cities.epub => path/to/books/tale_of_two_cities.wordtiming
+
+    -s OUTPUT_SENTENCEINFO_FILE | --output-sentenceinfo OUTPUT_SENTENCEINFO_FILE
+      copy the cached sentenceinfo, uncompressed, to OUTPUT_SENTENCEINFO_FILE
+      default is EBOOK_FILE, with any file extension removed, and .sentenceinfo appended
+        e.g. path/to/books/tale_of_two_cities.epub => path/to/books/tale_of_two_cities.wordtiming
+      NOTE: this has no effect unless EBOOK_PARSER 'cr3' is used
+
+    --meld
+      before outputting word timings, open meld to view diff of ebook+audiobooks words
+        run: `meld EBOOK_WORDS_FILE AUDIOBOOK_WORD_FILE`
+
+    --ebook-parser-first
+      (this is the default)
+      check command PATH for each EBOOK_PARSER, and use only the first available
+      EBOOK_PARSER=cr3
+        check `cr3` on command PATH
+      EBOOK_PARSER=pandoc
+        check `pandoc` on command PATH
+
+    --cr3
+      same as: --ebook-parser=cr3
+    --pandoc
+      same as: --ebook-parser=pandoc
+
+    --ebook-parser=EBOOK_PARSER
+      force use of specific EBOOK_PARSER, without checking PATH
+
+      NOTE: If multiple parsers are enabled with --ebook-parser=*,
+              they are all are generated+cached,
+              but only the highest-listed below is used to generate EBOOK_WORDS_FILE.
+
+    EBOOK_PARSER is one of:
+      cr3
+        get EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
+        using: `cr3 --get-sentence-info ...`
+      pandoc
+        get EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
+        using: `pandoc -t plain ...`
