@@ -20,11 +20,13 @@ my $MODE_CACHE_AUDIOBOOK = "cache-audiobook";
 
 my $PYTHON_VOSK_VENV = "/opt/python-vosk";
 
+my $EXEC = basename $0;
+
 my $USAGE = "Usage:
-  $0 -h | --help
+  $EXEC -h | --help
     show this message
 
-  $0 [OPTS] EBOOK_FILE AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
+  $EXEC [OPTS] EBOOK_FILE AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
     Compare EBOOK_FILE and AUDIOBOOK_FILE(s), and generate an OUTPUT_WORDTIMING_FILE,
       containing each word in the *EBOOK*,
       with the best-guess start-time and filename from the *AUDIOBOOK*.
@@ -35,7 +37,7 @@ my $USAGE = "Usage:
     (1) AUDIOBOOK_FILE_VOSK_DATA - raw JSON from python-vosk
         -for each AUDIOBOOK_FILE:
           -ensure AUDIOBOOK_FILE_VOSK_DATA cache exists as in:
-            $0 --cache-audiobook AUDIOBOOK_FILE_VOSK_DATA
+            $EXEC --cache-audiobook AUDIOBOOK_FILE_VOSK_DATA
             (runs external tool vosk-words-json, which performs speech-to-text)
           -read AUDIOBOOK_FILE_VOSK_DATA from cache
     (2) AUDIOBOOK_WORDTIMING - spoken word timings for each word in audiobook
@@ -50,7 +52,7 @@ my $USAGE = "Usage:
           -write just AUDIOBOOK_WORD, one word per line
     (4) EBOOK_PARSED_CONTENT - structured data containing plaintext ebook text
         -ensure EBOOK_PARSED_CONTENT cache exists as in:
-          $0 --cache-ebook EBOOK_FILE
+          $EXEC --cache-ebook EBOOK_FILE
           (runs one or more external EBOOK_PARSER commands)
         -select exactly one EBOOK_PARSER (see --ebook-parser):
           cr3:    EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
@@ -87,7 +89,7 @@ my $USAGE = "Usage:
           -format line as AUDIOBOOK_START_POS,EBOOK_WORD,AUDIOBOOK_FILE
           -write line to OUTPUT_WORDTIMING_FILE
 
-  $0 [OPTS] --cache-ebook EBOOK_FILE [EBOOK_FILE EBOOK_FILE]
+  $EXEC [OPTS] --cache-ebook EBOOK_FILE [EBOOK_FILE EBOOK_FILE]
     -select EBOOK_PARSER(s) to generate EBOOK_PARSED_CONTENT, using the command PATH and OPTS
         cr3:    EBOOK_PARSED_CONTENT=COOLREADER_SENTENCE_INFO
         pandoc: EBOOK_PARSED_CONTENT=PANDOC_PLAINTEXT
@@ -107,7 +109,7 @@ my $USAGE = "Usage:
       -if no EBOOK_PARSER is available:
         -fail with an error message
 
-  $0 [OPTS] --cache-audiobook AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
+  $EXEC [OPTS] --cache-audiobook AUDIOBOOK_FILE [AUDIOBOOK_FILE AUDIOBOOK_FILE]
     -for each AUDIOBOOK_FILE:
       -check for cached Vosk data
         -if not cached:
