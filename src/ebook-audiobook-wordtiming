@@ -401,7 +401,9 @@ sub getEbookWordFile($){
 
   my $wordContent = "";
   for my $sentence(@sentences){
-    my @words = grep {/\w/} split /[^a-z0-9']/, lc $sentence;
+    #split sentence at any amount of non-letter/non-mark/non-number/non-apostrophe chars
+    #  and remove any 'words' that have no letters
+    my @words = grep {/(?[\p{L} + \p{M} + \p{N}])/} split /(?[! (\p{L} + \p{M} + \p{N} + [']) ])+/, lc $sentence;
     for my $word(@words){
       $wordContent .= "$word\n";
     }
