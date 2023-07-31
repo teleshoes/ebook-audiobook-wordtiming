@@ -308,9 +308,12 @@ sub main(@){
     if(defined $$ebookParsedContentCacheFiles{cr3}){
       my $sentenceInfoCacheFile = $$ebookParsedContentCacheFiles{cr3};
 
-      $outputSentenceInfoFile = $ebookFile;
-      $outputSentenceInfoFile =~ s/\.\w+$//;
-      $outputSentenceInfoFile .= ".sentenceinfo";
+      if(not defined $outputSentenceInfoFile){
+        $outputSentenceInfoFile = $ebookFile;
+        $outputSentenceInfoFile =~ s/\.\w+$//;
+        $outputSentenceInfoFile .= ".sentenceinfo";
+      }
+
       if(-e $outputSentenceInfoFile){
         die "ERROR: $outputSentenceInfoFile already exists\n";
       }
