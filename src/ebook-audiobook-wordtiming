@@ -314,12 +314,16 @@ sub main(@){
         $outputSentenceInfoFile .= ".sentenceinfo";
       }
 
-      if(-e $outputSentenceInfoFile){
-        die "ERROR: $outputSentenceInfoFile already exists\n";
-      }
-
       my $sentenceInfo = readFileXZ $sentenceInfoCacheFile;
-      writeFile $outputSentenceInfoFile, $sentenceInfo;
+
+      if(-e $outputSentenceInfoFile){
+        my $oldSentenceInfo = readFile $outputSentenceInfoFile;
+        if($sentenceInfo ne $oldSentenceInfo){
+          die "ERROR: $outputSentenceInfoFile already exists and differs from new sentenceinfo\n";
+        }
+      }else{
+        writeFile $outputSentenceInfoFile, $sentenceInfo;
+      }
     }
   }elsif($mode eq $MODE_CACHE_EBOOK){
     my @ebookFiles = @files;
