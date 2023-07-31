@@ -482,11 +482,19 @@ sub runVoskWordsJson($$){
     die "ERROR: $inputWaveFile is not a mono WAVE\n";
   }
 
-  my @voskCmd = ("vosk-words-json", $inputWaveFile, "--output=$destJSONFile");
+  my $voskExec = "vosk-words-json";
+  $voskExec = `command -v '$voskExec'`;
+  chomp $voskExec;
+  if($voskExec !~ /vosk-words-json/){
+    die "ERROR: could not find vosk-words-json on PATH\n";
+  }
+
+  my @voskCmd = ($voskExec, $inputWaveFile, "--output=$destJSONFile");
 
   if(-x "$PYTHON_VOSK_VENV/bin/python3"){
     @voskCmd = ("$PYTHON_VOSK_VENV/bin/python3", @voskCmd);
   }
+
   run @voskCmd;
 
   if($deleteWaveFile){
