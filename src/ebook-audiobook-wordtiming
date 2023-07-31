@@ -7,6 +7,9 @@ use File::Basename qw(basename);
 use JSON qw(from_json);
 use Time::HiRes qw(time);
 
+use utf8;
+use open qw(:std :encoding(UTF-8));
+
 my $CACHE_BASE_DIR = "$ENV{HOME}/.cache/ebook-audiobook-wordtiming";
 my $CACHE_DIR_AUDIOBOOK_VOSK_WORDS_JSON = "$CACHE_BASE_DIR/audiobook-vosk-words-json";
 my $CACHE_DIR_EBOOK_COOLREADER_SENTENCEINFO = "$CACHE_BASE_DIR/ebook-coolreader-sentenceinfo";
