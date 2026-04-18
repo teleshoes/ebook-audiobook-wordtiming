@@ -21,7 +21,7 @@ my $MODE_WORDTIMING = "word-timing";
 my $MODE_CACHE_EBOOK = "cache-ebook";
 my $MODE_CACHE_AUDIOBOOK = "cache-audiobook";
 
-my $PYTHON_VOSK_VENV = "/opt/python-vosk";
+my $PYTHON_VOSK_VENV = "/opt/vosk-venv";
 
 my $EXEC = basename $0;
 
